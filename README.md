@@ -13,6 +13,25 @@ with broker routing rules and returns a stable subscription URL.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bioinformatist/broker-mihomo-patcher)
 
+Click the button above to create your own copy of this Worker. After GitHub
+creates the repository for you, add two repository secrets:
+
+- `CLOUDFLARE_ACCOUNT_ID`: your Cloudflare account ID.
+- `CLOUDFLARE_API_TOKEN`: a Cloudflare API token that can edit Workers.
+
+Then run the `Deploy Worker` workflow from GitHub Actions. Do not commit either
+value to the repository.
+
+## Who This Is For
+
+This project is useful if you already have a Mihomo/Clash YAML subscription,
+already use a compatible client such as CMFA, Clash Verge, or Mihomo, and want
+to keep your original subscription URL inside your own Cloudflare account.
+
+It is not a hosted service. It is not meant for people who want to use someone
+else's Worker, share subscription links publicly, or bypass the legal limits
+that apply to them.
+
 ## What It Does
 
 1. You deploy this Worker to your own Cloudflare account.
@@ -21,12 +40,11 @@ with broker routing rules and returns a stable subscription URL.
 4. You select the supported broker apps you need.
 5. The Worker gives you a new subscription URL to import into your client.
 
-The Worker caches patched YAML in your Cloudflare KV namespace. When your
-client refreshes the generated URL, the Worker returns the cached subscription
-when it is fresh and only refreshes the upstream subscription after the cache
-window expires. The current cache window is 24 hours. If the cache is expired
-but the upstream refresh fails, the Worker returns the stale cached subscription
-instead of breaking the client refresh.
+The Worker keeps a patched copy of the subscription in your own Cloudflare KV.
+Clients normally receive that cached copy. The Worker only refreshes the
+original subscription after the cache window expires. The current cache window
+is 24 hours. If the refresh fails, the Worker returns the last cached copy so
+your client does not immediately break.
 
 ## Privacy Boundary
 
@@ -64,42 +82,27 @@ on `workers.dev` and later open it through a Custom Domain, paste the management
 link or management token on the locked page once. Subscription URLs shown by the
 UI use the origin you are currently visiting.
 
-## Deployment
-
-Use the deployment button above, then add these GitHub repository secrets:
-
-- `CLOUDFLARE_ACCOUNT_ID`: your Cloudflare account ID.
-- `CLOUDFLARE_API_TOKEN`: a Cloudflare API token with permission to edit
-  Workers.
-
-After the secrets are set, run the `Deploy Worker` workflow from GitHub Actions.
-Do not commit either value to this repository.
-
 ## Management Link Recovery
 
-If you lose the management link and clear browser storage, v1 has no password
-recovery flow. Open Cloudflare KV, delete `profile:v1` and
-`subscription-cache:v1`, then open the Worker URL and configure it again.
+If you lose the management link and also clear browser storage, v1 cannot prove
+that you are the owner from the web page alone.
+
+To start over, open your Cloudflare dashboard, find the KV namespace bound to
+this Worker, delete `profile:v1` and `subscription-cache:v1`, then open the
+Worker URL again and configure it from scratch.
 
 ## Known Issues
 
-- **Cloudflare KV is eventually consistent.** Regenerating the subscription URL
-  updates `profile:v1`, but an old subscription URL may continue to work briefly
-  until the KV update reaches the region serving that request.
-- **The first setup is unauthenticated.** The first setup and upstream check are
-  public until `profile:v1` exists. Configure the Worker soon after deployment.
-  If someone else configures it first, delete `profile:v1` and
-  `subscription-cache:v1` from Cloudflare KV, wait briefly for KV propagation,
-  then configure it again.
-- **The 24-hour cache window is not a global lock.** If multiple regions or
-  clients refresh right after the cache expires, the Worker may make more than
-  one upstream request before KV propagation settles.
-- **`HEAD /sub/<token>` is only a token-validity probe.** It does not fetch the
-  upstream subscription, so a successful `HEAD` response does not guarantee that
-  a later `GET` can refresh the upstream subscription successfully.
-
-## Further Reading
-
-- [Architecture Notes](docs/architecture.md): Worker boundary, rule packs,
-  subscription-client compatibility findings, and caching behavior.
-- [Contributing](CONTRIBUTING.md): local development commands.
+- **A regenerated subscription URL may not take effect everywhere immediately.**
+  Cloudflare KV is eventually consistent, so the old URL may continue to work
+  briefly in some regions.
+- **The first setup page is open until the Worker is configured.** Configure the
+  Worker soon after deployment. If someone else configures it first, delete
+  `profile:v1` and `subscription-cache:v1` from Cloudflare KV, wait briefly, and
+  configure it again.
+- **The 24-hour cache is not a perfect global lock.** If multiple clients or
+  Cloudflare regions refresh right after the cache expires, the Worker may ask
+  the upstream provider more than once.
+- **A successful `HEAD` request only means the subscription token exists.** It
+  does not prove that the next full subscription refresh can reach the upstream
+  provider.
