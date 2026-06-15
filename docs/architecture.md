@@ -31,6 +31,31 @@ The current implementation deliberately keeps the subscription token separate
 from the management token. The subscription token is a bearer URL for clients;
 the management token is used only by the UI/API to update the stored profile.
 
+## Rule Packs
+
+The UI presents broker apps to users, while the implementation stores selected
+rule packs in the profile.
+
+Futu/Moomoo:
+
+- `moomoo.com`
+- `futuhn.com`
+- `futustatic.com`
+- `futunn.com`
+
+Longbridge:
+
+- `longbridge.com`
+- `longbridge.sg`
+- `lbctrl.com`
+- `lbkrs.com`
+
+Rules are injected at the top of the YAML `rules` list:
+
+```text
+DOMAIN-SUFFIX,<domain>,<targetPolicy>
+```
+
 ## Client Compatibility Findings
 
 CMFA fetches HTTP subscriptions with a `User-Agent` shaped like:
