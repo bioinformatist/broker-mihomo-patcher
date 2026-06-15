@@ -440,7 +440,7 @@ function validateUpstreamUrl(value: string): void {
 async function fetchUpstreamConfig(upstreamUrl: string, sourceRequest?: Request): Promise<UpstreamSubscription> {
   let response = await fetchUpstreamResponse(upstreamUrl, sourceRequest);
   if (shouldRetryYtooQttSubscription(upstreamUrl, response.status)) {
-    response.body?.cancel();
+    await cancelResponseBody(response);
     response = await fetchUpstreamResponse(upstreamUrl, sourceRequest, true);
   }
 
@@ -477,6 +477,14 @@ async function fetchUpstreamResponse(
   return response;
 }
 
+async function cancelResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Best-effort cleanup before retrying the upstream request.
+  }
+}
+
 function upstreamRequestHeaders(sourceRequest?: Request, ytooQttCompatibility = false): HeadersInit {
   const headers: Record<string, string> = {
     accept: UPSTREAM_ACCEPT,
@@ -484,7 +492,7 @@ function upstreamRequestHeaders(sourceRequest?: Request, ytooQttCompatibility = 
   };
 
   if (ytooQttCompatibility) {
-    // qTT/YToo rejects non-empty proxy-chain client IP headers with 404.
+    // Try to suppress proxy-chain client IP headers that qTT/YToo rejects with 404.
     headers["x-forwarded-for"] = "";
   }
 

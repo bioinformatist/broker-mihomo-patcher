@@ -118,7 +118,7 @@ describe("worker routes", () => {
     ]);
   });
 
-  it("retries qTT YToo subscriptions with compatibility headers", async () => {
+  it("retries qTT YToo subscriptions while attempting to suppress XFF", async () => {
     const response = await callWorker(
       "/inspect",
       {
