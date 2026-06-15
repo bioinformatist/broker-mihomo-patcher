@@ -51,6 +51,10 @@ Save the generated links:
   broker selection, or regenerate the subscription URL if it leaks.
 
 The same browser also stores the management token in `localStorage`.
+Browser storage is scoped to the current origin. If you configured the Worker
+on `workers.dev` and later open it through a Custom Domain, paste the management
+link or management token on the locked page once. Subscription URLs shown by the
+UI use the origin you are currently visiting.
 
 ## GitHub Actions Deployment
 

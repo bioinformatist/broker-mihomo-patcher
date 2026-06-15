@@ -829,6 +829,24 @@ function clientScript(): string {
     return window.localStorage.getItem(adminStorageKey);
   }
 
+  function readAdminTokenFromInput(value) {
+    var trimmed = String(value || "").trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    if (trimmed.charAt(0) === "#") {
+      return new URLSearchParams(trimmed.slice(1)).get("admin") || "";
+    }
+
+    try {
+      var url = new URL(trimmed);
+      return new URLSearchParams(url.hash.slice(1)).get("admin") || "";
+    } catch (_) {
+      return trimmed;
+    }
+  }
+
   function setHtml(html) {
     app.innerHTML = html;
   }
@@ -983,9 +1001,38 @@ function clientScript(): string {
     setHtml('' +
       '<h2>Configured</h2>' +
       '<p>This Worker is already configured. Open it with the private management link to edit settings.</p>' +
-      '<div class="actions"><button id="forgetButton" class="secondary">Forget local management link</button></div>');
+      '<form id="unlockForm" class="section">' +
+        '<label>Management link or token' +
+          '<input id="managementInput" type="text" autocomplete="off">' +
+        '</label>' +
+        '<div class="actions">' +
+          '<button type="submit">Unlock</button>' +
+          '<button id="forgetButton" class="secondary" type="button">Forget local management link</button>' +
+        '</div>' +
+        '<div id="message" class="message"></div>' +
+      '</form>');
+    document.getElementById("unlockForm").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var submittedToken = readAdminTokenFromInput(document.getElementById("managementInput").value);
+      if (!submittedToken) {
+        setMessage("Management link or token is required.", "error");
+        return;
+      }
+
+      window.localStorage.setItem(adminStorageKey, submittedToken);
+      token = submittedToken;
+      setMessage("Unlocking...", "");
+      api("/profile", { method: "GET" }, token).then(function (body) {
+        renderConfigured(body, token);
+      }).catch(function (error) {
+        window.localStorage.removeItem(adminStorageKey);
+        setMessage(error.message, "error");
+      });
+    });
     document.getElementById("forgetButton").addEventListener("click", function () {
       window.localStorage.removeItem(adminStorageKey);
+      document.getElementById("managementInput").value = "";
+      setMessage("Local management link forgotten.", "success");
     });
   }
 
