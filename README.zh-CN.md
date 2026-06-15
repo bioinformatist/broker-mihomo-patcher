@@ -3,6 +3,9 @@
 这是一个自托管的 Cloudflare Worker 应用，用于给 Mihomo/Clash YAML
 订阅配置补充券商访问规则，并生成一个稳定的订阅地址。
 
+![支持富途 / Moomoo](https://img.shields.io/badge/supports-Futu%20%2F%20Moomoo-2ea44f)
+![支持长桥](https://img.shields.io/badge/supports-Longbridge-2ea44f)
+
 > [!WARNING]
 > 本工具仅用于境外合法专业投资者在中国大陆境内解决券商 App
 > 访问网络不畅的问题。任何中国大陆存量投资者滥用本工具均属违法行为。
@@ -13,19 +16,18 @@
 
 点击上方按钮创建你自己的 Worker，然后从 GitHub Actions 完成部署：
 
-1. 找到你的 Cloudflare account ID：
-   `Cloudflare dashboard -> Workers & Pages -> Account details -> Account ID`。
-2. 创建 Cloudflare API token：
+1. 创建 Cloudflare API token：
    `Cloudflare dashboard -> Manage Account -> Account API Tokens -> Create Token`。
    在 `Permission policies` 里打开 `Custom`，选择
    `Edit Cloudflare Workers`。Token 的作用范围只选择你准备用来部署这个
-   Worker 的 Cloudflare 账号。Cloudflare 显示 token 后马上复制保存；这个值只会显示一次。
-3. 把两个值填到 GitHub：
+   Worker 的 Cloudflare 账号。复制 Cloudflare 显示的 account ID 和 token；
+   token 只会显示一次。
+2. 把两个值填到 GitHub：
    `你的新 GitHub 仓库 -> Settings -> Secrets and variables -> Actions -> Secrets -> New repository secret`。
    创建这两个 repository secrets，名字必须完全一致：
    - `CLOUDFLARE_ACCOUNT_ID`：第 1 步复制的 account ID。
-   - `CLOUDFLARE_API_TOKEN`：第 2 步创建的 API token。
-4. 部署：
+   - `CLOUDFLARE_API_TOKEN`：第 1 步创建的 API token。
+3. 部署：
    `GitHub 仓库 -> Actions -> Deploy Worker -> Run workflow`。
 
 不要把 account ID 或 API token 提交到仓库。

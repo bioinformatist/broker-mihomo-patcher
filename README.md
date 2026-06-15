@@ -3,6 +3,9 @@
 A self-hosted Cloudflare Worker that patches a Mihomo/Clash YAML subscription
 with broker routing rules and returns a stable subscription URL.
 
+![Supports Futu / Moomoo](https://img.shields.io/badge/supports-Futu%20%2F%20Moomoo-2ea44f)
+![Supports Longbridge](https://img.shields.io/badge/supports-Longbridge-2ea44f)
+
 > [!WARNING]
 > This tool is only intended to help legal professional investors outside
 > mainland China resolve unstable broker app access while temporarily located in
@@ -16,20 +19,18 @@ with broker routing rules and returns a stable subscription URL.
 Click the button above to create your own copy of this Worker, then finish the
 deployment from GitHub Actions:
 
-1. Find your Cloudflare account ID:
-   `Cloudflare dashboard -> Workers & Pages -> Account details -> Account ID`.
-2. Create a Cloudflare API token:
+1. Create a Cloudflare API token:
    `Cloudflare dashboard -> Manage Account -> Account API Tokens -> Create Token`.
    Under `Permission policies`, open `Custom` and choose
    `Edit Cloudflare Workers`. Scope the token to the Cloudflare account where
-   this Worker will be deployed. Copy the token value when Cloudflare shows it;
-   it is only shown once.
-3. Add the values to GitHub:
+   this Worker will be deployed. Copy the account ID and token value shown by
+   Cloudflare; the token is only shown once.
+2. Add the values to GitHub:
    `your new GitHub repository -> Settings -> Secrets and variables -> Actions -> Secrets -> New repository secret`.
    Create exactly these two repository secrets:
    - `CLOUDFLARE_ACCOUNT_ID`: the account ID from step 1.
-   - `CLOUDFLARE_API_TOKEN`: the API token from step 2.
-4. Deploy:
+   - `CLOUDFLARE_API_TOKEN`: the API token from step 1.
+3. Deploy:
    `GitHub repository -> Actions -> Deploy Worker -> Run workflow`.
 
 Do not commit the account ID or API token to the repository.
