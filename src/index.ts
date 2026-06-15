@@ -47,6 +47,7 @@ const SUBSCRIPTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_PROFILE_UPDATE_INTERVAL_HOURS = 24;
 const UPSTREAM_ACCEPT = "text/yaml, application/yaml, text/plain, */*";
 const DEFAULT_UPSTREAM_USER_AGENT = "ClashMetaForAndroid/2.11.30";
+const YTOO_COMPAT_HOST_SUFFIXES = ["ai-163cdn.com", "qtt-163cdn.com"];
 const YTOO_QTT_COMPAT_RETRY_STATUSES = new Set([400, 403, 404]);
 const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="14" fill="#111827"/>
@@ -511,7 +512,7 @@ function isYtooQttSubscriptionUrl(value: string): boolean {
     return false;
   }
 
-  if (url.hostname !== "qtt-163cdn.com" && !url.hostname.endsWith(".qtt-163cdn.com")) {
+  if (!YTOO_COMPAT_HOST_SUFFIXES.some((suffix) => url.hostname === suffix || url.hostname.endsWith(`.${suffix}`))) {
     return false;
   }
   if (url.pathname !== "/sub" || url.searchParams.get("target") !== "clash") {
