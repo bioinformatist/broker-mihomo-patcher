@@ -1,0 +1,81 @@
+# Broker Mihomo Patcher
+
+这是一个自托管的 Cloudflare Worker 应用，用于给 Mihomo/Clash YAML
+订阅配置补充券商访问规则，并生成一个稳定的订阅地址。
+
+> [!WARNING]
+> 本工具仅用于境外合法专业投资者在中国大陆境内解决券商 App
+> 访问网络不畅的问题。任何中国大陆存量投资者滥用本工具均属违法行为。
+> 请勿将本工具用于错误用途的宣传或引导；一经发现，作者会立即停止维护，
+> 甚至删除本仓库。
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bioinformatist/broker-mihomo-patcher)
+
+## 它做什么
+
+1. 你把这个 Worker 部署到自己的 Cloudflare 账号。
+2. 打开部署后的 Worker 页面。
+3. 输入你原本的 Mihomo/Clash 订阅地址。
+4. 选择需要支持的券商 App。
+5. Worker 生成一个新的订阅地址，供你的客户端导入。
+
+Worker 会把补丁后的 YAML 缓存在你自己的 Cloudflare KV 命名空间里。
+当客户端刷新生成后的订阅地址时，Worker 会优先返回仍然新鲜的缓存订阅；
+只有缓存窗口过期后才会重新请求上游订阅。目前缓存窗口是 24 小时。
+如果缓存已经过期，但上游刷新失败，Worker 会返回旧缓存，避免客户端刷新直接失败。
+
+## 隐私边界
+
+你的原始订阅地址会存储在你自己的 Cloudflare KV 命名空间中，不会出现在生成后的订阅地址里。
+
+Worker 在运行时仍然需要读取原始订阅地址，才能对配置打补丁。如果你不希望任何第三方服务看到这个地址，请把本项目部署到你自己的 Cloudflare 账号，而不是使用别人的 Worker。
+
+## 使用
+
+部署后，打开你的 Worker 地址，例如：
+
+```text
+https://broker-mihomo-patcher.<your-subdomain>.workers.dev
+```
+
+首次打开页面会要求填写：
+
+- 上游 Mihomo/Clash YAML 订阅地址；
+- 需要启用的券商 App；
+- 目标策略组，通常会默认选择 `PROXY`。
+
+请保存生成后的链接：
+
+- 订阅地址：导入到 CMFA、Clash Verge、Mihomo 或其他兼容客户端；
+- 管理链接：后续修改上游订阅地址、券商选择，或在订阅地址泄露后重新生成订阅地址时使用。
+
+同一个浏览器也会把管理 token 保存在 `localStorage`。浏览器存储按当前 origin
+隔离：如果你先在 `workers.dev` 上配置 Worker，之后又通过 Custom Domain
+打开页面，需要在锁定页面粘贴一次管理链接或管理 token。页面显示的订阅地址会使用你当前访问的 origin。
+
+## 部署
+
+点击上方部署按钮后，在 GitHub 仓库中添加这两个 Secrets：
+
+- `CLOUDFLARE_ACCOUNT_ID`：你的 Cloudflare account ID。
+- `CLOUDFLARE_API_TOKEN`：拥有编辑 Workers 权限的 Cloudflare API token。
+
+Secrets 填好后，在 GitHub Actions 中运行 `Deploy Worker` workflow。不要把这两个值提交到仓库。
+
+## 找回管理链接
+
+如果丢失管理链接，并且清空了浏览器存储，v1 没有密码找回流程。请打开
+Cloudflare KV，删除 `profile:v1` 和 `subscription-cache:v1`，然后重新打开
+Worker 页面配置。
+
+## 已知问题
+
+- **Cloudflare KV 是最终一致的。** 重新生成订阅地址会更新 `profile:v1`，但旧订阅地址可能会继续短暂可用，直到这次 KV 更新传播到处理请求的 Cloudflare 区域。
+- **首次配置尚未鉴权。** 在 `profile:v1` 存在之前，首次配置和上游检查是公开的。部署后请尽快完成配置。如果被其他人抢先配置，请在 Cloudflare KV 中删除 `profile:v1` 和 `subscription-cache:v1`，等待 KV 短暂传播后再重新配置。
+- **24 小时缓存窗口不是全局锁。** 如果多个区域或多个客户端刚好在缓存过期后同时刷新，Worker 可能会在 KV 传播稳定前发起超过一次上游请求。
+- **`HEAD /sub/<token>` 只是 token 有效性探测。** 它不会请求上游订阅，因此一次成功的 `HEAD` 响应不代表之后的 `GET` 一定能成功刷新上游订阅。
+
+## 延伸阅读
+
+- [架构说明](docs/architecture.md)：Worker 边界、规则包、订阅客户端兼容性发现，以及缓存行为。
+- [贡献指南](CONTRIBUTING.md)：本地开发命令。
