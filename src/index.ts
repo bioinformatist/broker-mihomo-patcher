@@ -21,8 +21,31 @@ interface ProfileInput {
   targetPolicy: string;
 }
 
+interface SubscriptionCache {
+  yaml: string;
+  fetchedAt: string;
+  upstreamUrl: string;
+  brokerPacks: BrokerPackId[];
+  targetPolicy: string;
+  headers: SubscriptionMetadataHeaders;
+}
+
+interface SubscriptionMetadataHeaders {
+  subscriptionUserinfo?: string;
+  profileUpdateInterval: string;
+}
+
+interface UpstreamSubscription {
+  text: string;
+  headers: SubscriptionMetadataHeaders;
+}
+
 const PROFILE_KEY = "profile:v1";
+const SUBSCRIPTION_CACHE_KEY = "subscription-cache:v1";
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
+const SUBSCRIPTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_PROFILE_UPDATE_INTERVAL_HOURS = 24;
+const DEFAULT_UPSTREAM_USER_AGENT = "ClashMetaForAndroid/2.11.30";
 
 class HttpError extends Error {
   constructor(
@@ -57,7 +80,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
 
   if (request.method === "POST" && url.pathname === "/inspect") {
-    return handleInspect(request);
+    return handleInspect(request, env);
   }
 
   if (request.method === "POST" && url.pathname === "/setup") {
@@ -72,18 +95,30 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     return handleUpdateProfile(request, env, url.origin);
   }
 
+  if (request.method === "POST" && url.pathname === "/subscription-token") {
+    return handleRotateSubscriptionToken(request, env, url.origin);
+  }
+
   if ((request.method === "GET" || request.method === "HEAD") && url.pathname.startsWith("/sub/")) {
     const subToken = decodeURIComponent(url.pathname.slice("/sub/".length));
-    return handleSubscription(env, subToken, request.method === "HEAD");
+    return handleSubscription(request, env, subToken, request.method === "HEAD");
   }
 
   return new Response("Not found", { status: 404 });
 }
 
-async function handleInspect(request: Request): Promise<Response> {
+async function handleInspect(request: Request, env: Env): Promise<Response> {
+  const profile = await getProfile(env);
+  if (profile) {
+    const token = getBearerToken(request);
+    if (!token || !(await verifyToken(token, profile.adminTokenHash))) {
+      throw new HttpError(401, "Invalid management link.");
+    }
+  }
+
   const input = parseInspectInput(await readJson(request));
-  const upstreamText = await fetchUpstreamConfig(input.upstreamUrl);
-  const policyGroups = extractPolicyGroups(upstreamText);
+  const upstream = await fetchUpstreamConfig(input.upstreamUrl);
+  const policyGroups = extractPolicyGroups(upstream.text);
 
   return jsonResponse({
     policyGroups,
@@ -97,9 +132,9 @@ async function handleSetup(request: Request, env: Env, origin: string): Promise<
   }
 
   const input = parseProfileInput(await readJson(request));
-  const upstreamText = await fetchUpstreamConfig(input.upstreamUrl);
-  const policyGroups = extractPolicyGroups(upstreamText);
-  patchConfig(upstreamText, input);
+  const upstream = await fetchUpstreamConfig(input.upstreamUrl);
+  const policyGroups = extractPolicyGroups(upstream.text);
+  const cache = buildSubscriptionCache(upstream, input);
 
   const subToken = generateToken();
   const adminToken = generateToken();
@@ -112,6 +147,7 @@ async function handleSetup(request: Request, env: Env, origin: string): Promise<
     updatedAt: now,
   };
 
+  await putSubscriptionCache(env, cache);
   await putProfile(env, profile);
 
   return jsonResponse({
@@ -134,9 +170,9 @@ async function handleGetProfile(request: Request, env: Env, origin: string): Pro
 async function handleUpdateProfile(request: Request, env: Env, origin: string): Promise<Response> {
   const profile = await requireAuthorizedProfile(request, env);
   const input = parseProfileInput(await readJson(request));
-  const upstreamText = await fetchUpstreamConfig(input.upstreamUrl);
-  const policyGroups = extractPolicyGroups(upstreamText);
-  patchConfig(upstreamText, input);
+  const upstream = await fetchUpstreamConfig(input.upstreamUrl);
+  const policyGroups = extractPolicyGroups(upstream.text);
+  const cache = buildSubscriptionCache(upstream, input);
 
   const updatedProfile: StoredProfile = {
     ...profile,
@@ -144,6 +180,7 @@ async function handleUpdateProfile(request: Request, env: Env, origin: string): 
     updatedAt: new Date().toISOString(),
   };
 
+  await putSubscriptionCache(env, cache);
   await putProfile(env, updatedProfile);
 
   return jsonResponse({
@@ -152,7 +189,23 @@ async function handleUpdateProfile(request: Request, env: Env, origin: string): 
   });
 }
 
-async function handleSubscription(env: Env, subToken: string, headOnly = false): Promise<Response> {
+async function handleRotateSubscriptionToken(request: Request, env: Env, origin: string): Promise<Response> {
+  const profile = await requireAuthorizedProfile(request, env);
+  const updatedProfile: StoredProfile = {
+    ...profile,
+    subToken: generateToken(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  await putProfile(env, updatedProfile);
+
+  return jsonResponse({
+    profile: publicProfile(updatedProfile, []),
+    subscriptionUrl: subscriptionUrlForProfile(origin, updatedProfile),
+  });
+}
+
+async function handleSubscription(request: Request, env: Env, subToken: string, headOnly = false): Promise<Response> {
   const profile = await getProfile(env);
   if (!profile) {
     throw new HttpError(404, "This Worker has not been configured yet.");
@@ -163,24 +216,123 @@ async function handleSubscription(env: Env, subToken: string, headOnly = false):
   }
 
   if (headOnly) {
+    const cache = await getSubscriptionCacheEntry(env);
     return new Response(null, {
-      headers: subscriptionHeaders(),
+      headers: subscriptionHeaders(cacheMatchesProfile(cache, profile) ? cache : null),
     });
   }
 
-  const upstreamText = await fetchUpstreamConfig(profile.upstreamUrl);
-  const patched = patchConfig(upstreamText, profile);
+  const cache = await getSubscriptionCache(request, env, profile);
 
-  return new Response(patched, {
-    headers: subscriptionHeaders(),
+  return new Response(cache.yaml, {
+    headers: subscriptionHeaders(cache),
   });
 }
 
-function subscriptionHeaders(): HeadersInit {
+async function getSubscriptionCache(request: Request, env: Env, profile: StoredProfile): Promise<SubscriptionCache> {
+  const cache = await getSubscriptionCacheEntry(env);
+  if (isUsableCache(cache, profile)) {
+    return cache;
+  }
+
+  try {
+    const upstream = await fetchUpstreamConfig(profile.upstreamUrl, request);
+    const refreshedCache = buildSubscriptionCache(upstream, profile);
+    await putSubscriptionCache(env, refreshedCache);
+    return refreshedCache;
+  } catch (error) {
+    if (cacheMatchesProfile(cache, profile)) {
+      return cache;
+    }
+
+    throw error;
+  }
+}
+
+function buildSubscriptionCache(upstream: UpstreamSubscription, input: ProfileInput): SubscriptionCache {
   return {
+    yaml: patchConfig(upstream.text, input),
+    fetchedAt: new Date().toISOString(),
+    upstreamUrl: input.upstreamUrl,
+    brokerPacks: input.brokerPacks,
+    targetPolicy: input.targetPolicy,
+    headers: upstream.headers,
+  };
+}
+
+async function getSubscriptionCacheEntry(env: Env): Promise<SubscriptionCache | null> {
+  const raw = await env.BROKER_PATCHER_KV.get(SUBSCRIPTION_CACHE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const cache = JSON.parse(raw) as unknown;
+    return isSubscriptionCache(cache) ? cache : null;
+  } catch {
+    return null;
+  }
+}
+
+function isSubscriptionCache(value: unknown): value is SubscriptionCache {
+  if (!isPlainRecord(value) || !isPlainRecord(value.headers)) {
+    return false;
+  }
+
+  return (
+    typeof value.yaml === "string" &&
+    typeof value.fetchedAt === "string" &&
+    typeof value.upstreamUrl === "string" &&
+    Array.isArray(value.brokerPacks) &&
+    value.brokerPacks.every(isBrokerPackId) &&
+    typeof value.targetPolicy === "string" &&
+    typeof value.headers.profileUpdateInterval === "string" &&
+    (value.headers.subscriptionUserinfo === undefined || typeof value.headers.subscriptionUserinfo === "string")
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function putSubscriptionCache(env: Env, cache: SubscriptionCache): Promise<void> {
+  await env.BROKER_PATCHER_KV.put(SUBSCRIPTION_CACHE_KEY, JSON.stringify(cache));
+}
+
+function isUsableCache(cache: SubscriptionCache | null, profile: StoredProfile): cache is SubscriptionCache {
+  if (!cache || !cacheMatchesProfile(cache, profile)) {
+    return false;
+  }
+
+  const fetchedAt = Date.parse(cache.fetchedAt);
+  return Number.isFinite(fetchedAt) && Date.now() - fetchedAt < SUBSCRIPTION_CACHE_TTL_MS;
+}
+
+function cacheMatchesProfile(cache: SubscriptionCache | null, profile: ProfileInput): cache is SubscriptionCache {
+  if (!cache) {
+    return false;
+  }
+
+  return (
+    cache.upstreamUrl === profile.upstreamUrl &&
+    cache.targetPolicy === profile.targetPolicy &&
+    cache.brokerPacks.length === profile.brokerPacks.length &&
+    cache.brokerPacks.every((pack, index) => pack === profile.brokerPacks[index])
+  );
+}
+
+function subscriptionHeaders(cache: SubscriptionCache | null): HeadersInit {
+  const headers: Record<string, string> = {
     "content-type": "text/yaml; charset=utf-8",
     "cache-control": "no-store",
+    "profile-update-interval": cache?.headers.profileUpdateInterval ?? String(DEFAULT_PROFILE_UPDATE_INTERVAL_HOURS),
   };
+
+  if (cache?.headers.subscriptionUserinfo) {
+    headers["subscription-userinfo"] = cache.headers.subscriptionUserinfo;
+  }
+
+  return headers;
 }
 
 async function requireAuthorizedProfile(request: Request, env: Env): Promise<StoredProfile> {
@@ -276,12 +428,13 @@ function validateUpstreamUrl(value: string): void {
   }
 }
 
-async function fetchUpstreamConfig(upstreamUrl: string): Promise<string> {
+async function fetchUpstreamConfig(upstreamUrl: string, sourceRequest?: Request): Promise<UpstreamSubscription> {
   let response: Response;
   try {
     response = await fetch(upstreamUrl, {
       headers: {
         accept: "text/yaml, application/yaml, text/plain, */*",
+        "user-agent": upstreamUserAgent(sourceRequest),
       },
     });
   } catch (error) {
@@ -298,7 +451,40 @@ async function fetchUpstreamConfig(upstreamUrl: string): Promise<string> {
     throw new HttpError(502, "Upstream subscription returned an empty response.");
   }
 
-  return text;
+  return {
+    text,
+    headers: readSubscriptionMetadataHeaders(response.headers),
+  };
+}
+
+function upstreamUserAgent(sourceRequest?: Request): string {
+  const userAgent = sourceRequest?.headers.get("user-agent")?.trim();
+  if (userAgent?.startsWith("ClashMetaForAndroid/")) {
+    return userAgent;
+  }
+
+  return DEFAULT_UPSTREAM_USER_AGENT;
+}
+
+function readSubscriptionMetadataHeaders(headers: Headers): SubscriptionMetadataHeaders {
+  return {
+    subscriptionUserinfo: cleanHeaderValue(headers.get("subscription-userinfo")),
+    profileUpdateInterval: normalizeProfileUpdateInterval(headers.get("profile-update-interval")),
+  };
+}
+
+function cleanHeaderValue(value: string | null): string | undefined {
+  const cleaned = value?.trim();
+  return cleaned || undefined;
+}
+
+function normalizeProfileUpdateInterval(value: string | null): string {
+  const parsed = Number.parseInt(value?.trim() ?? "", 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return String(DEFAULT_PROFILE_UPDATE_INTERVAL_HOURS);
+  }
+
+  return String(Math.max(parsed, DEFAULT_PROFILE_UPDATE_INTERVAL_HOURS));
 }
 
 async function readJson(request: Request): Promise<unknown> {
@@ -757,7 +943,7 @@ function clientScript(): string {
       var payload = { upstreamUrl: document.getElementById("upstreamUrl").value.trim() };
       setBusy(inspectButton, true);
       setMessage("Checking upstream...", "");
-      api("/inspect", { method: "POST", body: JSON.stringify(payload) }).then(function (body) {
+      api("/inspect", { method: "POST", body: JSON.stringify(payload) }, token).then(function (body) {
         state.policyGroups = body.policyGroups || [];
         var targetPolicy = document.getElementById("targetPolicy");
         var options = state.policyGroups.length ? state.policyGroups : [body.defaultPolicy || "PROXY"];
@@ -824,6 +1010,7 @@ function clientScript(): string {
       '</div>' +
       '<div class="actions">' +
         '<button id="downloadBackup" class="secondary" type="button">Download backup</button>' +
+        '<button id="rotateSubToken" class="secondary" type="button">Regenerate subscription URL</button>' +
       '</div>' +
       formHtml(profile));
 
@@ -841,6 +1028,16 @@ function clientScript(): string {
       link.download = "broker-mihomo-patcher-links.txt";
       link.click();
       URL.revokeObjectURL(link.href);
+    });
+    document.getElementById("rotateSubToken").addEventListener("click", function () {
+      if (!window.confirm("Regenerate the subscription URL? Existing clients using the old URL will stop updating after Cloudflare KV propagation.")) {
+        return;
+      }
+      api("/subscription-token", { method: "POST" }, token).then(function (updatedBody) {
+        renderConfigured(updatedBody, token);
+      }).catch(function (error) {
+        setMessage(error.message, "error");
+      });
     });
     attachFormHandlers("update", token);
   }

@@ -13,8 +13,12 @@ with broker routing rules and returns a stable subscription URL.
 4. You select broker rule packs, currently Futu/Moomoo and Longbridge.
 5. The Worker gives you a new subscription URL to import into your client.
 
-When your client refreshes the generated URL, the Worker fetches your upstream
-subscription, injects broker `DOMAIN-SUFFIX` rules, and returns patched YAML.
+The Worker caches patched YAML in your Cloudflare KV namespace. When your
+client refreshes the generated URL, the Worker returns the cached subscription
+when it is fresh and only refreshes the upstream subscription after the cache
+window expires. The current cache window is 24 hours. If the cache is expired
+but the upstream refresh fails, the Worker returns the stale cached subscription
+instead of breaking the client refresh.
 
 ## Privacy Boundary
 
@@ -44,7 +48,7 @@ Save the generated links:
 - subscription URL: import this into CMFA, Clash Verge, Mihomo, or another
   compatible client;
 - management link: use this private link later to change the upstream URL or
-  broker selection.
+  broker selection, or regenerate the subscription URL if it leaks.
 
 The same browser also stores the management token in `localStorage`.
 
@@ -67,8 +71,27 @@ the token to this repository.
 ## Management Link Recovery
 
 If you lose the management link and clear browser storage, v1 has no password
-recovery flow. Open Cloudflare KV, delete the `profile:v1` key, then open the
-Worker URL and configure it again.
+recovery flow. Open Cloudflare KV, delete `profile:v1` and
+`subscription-cache:v1`, then open the Worker URL and configure it again.
+
+## Known Issues
+
+Cloudflare KV is eventually consistent across regions. Regenerating the
+subscription URL updates `profile:v1`, but an old subscription URL may continue
+to work briefly until the KV update reaches the region serving that request.
+
+The first setup and upstream check are public until `profile:v1` exists.
+Configure the Worker soon after deployment. If someone else configures it first,
+delete `profile:v1` and `subscription-cache:v1` from Cloudflare KV, wait briefly
+for KV propagation, then configure it again.
+
+The 24-hour cache window is not a strict global lock. If multiple regions or
+clients refresh right after the cache expires, the Worker may make more than one
+upstream request before KV propagation settles.
+
+`HEAD /sub/<token>` is only a token-validity probe. It does not fetch the
+upstream subscription, so a successful `HEAD` response does not guarantee that a
+later `GET` can refresh the upstream subscription successfully.
 
 ## Rule Packs
 
@@ -114,4 +137,4 @@ npm run dev
 ```
 
 See [Architecture Notes](docs/architecture.md) for the Worker boundary,
-subscription-client compatibility findings, and the planned caching direction.
+subscription-client compatibility findings, and caching behavior.
