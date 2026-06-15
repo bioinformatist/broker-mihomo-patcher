@@ -3,8 +3,8 @@
 A self-hosted Cloudflare Worker that patches a Mihomo/Clash YAML subscription
 with broker routing rules and returns a stable subscription URL.
 
-![Supports Futu / Moomoo](https://img.shields.io/badge/supports-Futu%20%2F%20Moomoo-2ea44f)
-![Supports Longbridge](https://img.shields.io/badge/supports-Longbridge-2ea44f)
+![Supports Futu / Moomoo](https://img.shields.io/badge/supports-Futu%20%2F%20Moomoo-ff6900)
+![Supports Longbridge](https://img.shields.io/badge/supports-Longbridge-1687e9)
 
 > [!WARNING]
 > This tool is only intended to help legal professional investors outside

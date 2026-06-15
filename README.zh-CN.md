@@ -3,8 +3,8 @@
 这是一个自托管的 Cloudflare Worker 应用，用于给 Mihomo/Clash YAML
 订阅配置补充券商访问规则，并生成一个稳定的订阅地址。
 
-![支持富途 / Moomoo](https://img.shields.io/badge/supports-Futu%20%2F%20Moomoo-2ea44f)
-![支持长桥](https://img.shields.io/badge/supports-Longbridge-2ea44f)
+![Supports Futu / Moomoo](https://img.shields.io/badge/supports-Futu%20%2F%20Moomoo-ff6900)
+![Supports Longbridge](https://img.shields.io/badge/supports-Longbridge-1687e9)
 
 > [!WARNING]
 > 本工具仅用于境外合法专业投资者在中国大陆境内解决券商 App
