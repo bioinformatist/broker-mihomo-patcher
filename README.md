@@ -5,6 +5,7 @@ with broker routing rules and returns a stable subscription URL.
 
 ![Supports Futu / Moomoo](https://img.shields.io/badge/supports-Futu%20%2F%20Moomoo-ff6900)
 ![Supports Longbridge](https://img.shields.io/badge/supports-Longbridge-1687e9)
+![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-6b7280)
 
 > [!WARNING]
 > This tool is only intended to help legal professional investors outside
@@ -120,3 +121,11 @@ Worker URL again and configure it from scratch.
 - **Some clients may only test whether the URL exists.** A successful URL check
   does not prove that the next full subscription refresh can reach the upstream
   provider.
+
+## License
+
+This project is source-available for non-commercial use under the
+[PolyForm Noncommercial License 1.0.0](LICENSE).
+
+Commercial use by anyone other than the maintainer requires separate written
+permission.

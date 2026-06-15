@@ -5,6 +5,7 @@
 
 ![Supports Futu / Moomoo](https://img.shields.io/badge/supports-Futu%20%2F%20Moomoo-ff6900)
 ![Supports Longbridge](https://img.shields.io/badge/supports-Longbridge-1687e9)
+![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-6b7280)
 
 > [!WARNING]
 > 本工具仅用于境外合法专业投资者在中国大陆境内解决券商 App
@@ -92,3 +93,10 @@ https://broker-mihomo-patcher.<your-subdomain>.workers.dev
 - **首次配置页面在 Worker 配置完成前是开放的。** 部署后请尽快完成配置。如果被其他人抢先配置，请在 Cloudflare KV 中删除 `profile:v1` 和 `subscription-cache:v1`，等待片刻后再重新配置。
 - **24 小时缓存不是完美的全局锁。** 如果多个客户端或多个 Cloudflare 区域刚好在缓存过期后同时刷新，Worker 可能会向上游发起超过一次请求。
 - **有些客户端只会先测试订阅地址是否存在。** 一次成功的地址检查不代表下一次完整订阅刷新一定能连接到上游服务商。
+
+## 许可证
+
+本项目以 [PolyForm Noncommercial License 1.0.0](LICENSE)
+提供源码，允许非商业用途使用。
+
+除维护者本人外，任何人的商业用途都需要另行取得书面授权。
