@@ -92,6 +92,34 @@ describe("worker routes", () => {
     ]);
   });
 
+  it("answers subscription HEAD probes without fetching upstream", async () => {
+    const setupResponse = await callWorker(
+      "/setup",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          upstreamUrl: UPSTREAM_URL,
+          brokerPacks: ["futu"],
+          targetPolicy: "PROXY",
+        }),
+      },
+      env,
+    );
+    const setupBody = await setupResponse.json() as {
+      subscriptionUrl: string;
+    };
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockClear();
+
+    const subscriptionPath = new URL(setupBody.subscriptionUrl).pathname;
+    const response = await callWorker(subscriptionPath, { method: "HEAD" }, env);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/yaml; charset=utf-8");
+    expect(await response.text()).toBe("");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("does not expose the profile without the management token", async () => {
     await callWorker(
       "/setup",

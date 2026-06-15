@@ -112,3 +112,6 @@ Start a local Worker:
 ```sh
 npm run dev
 ```
+
+See [Architecture Notes](docs/architecture.md) for the Worker boundary,
+subscription-client compatibility findings, and the planned caching direction.

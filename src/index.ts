@@ -72,9 +72,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     return handleUpdateProfile(request, env, url.origin);
   }
 
-  if (request.method === "GET" && url.pathname.startsWith("/sub/")) {
+  if ((request.method === "GET" || request.method === "HEAD") && url.pathname.startsWith("/sub/")) {
     const subToken = decodeURIComponent(url.pathname.slice("/sub/".length));
-    return handleSubscription(env, subToken);
+    return handleSubscription(env, subToken, request.method === "HEAD");
   }
 
   return new Response("Not found", { status: 404 });
@@ -152,7 +152,7 @@ async function handleUpdateProfile(request: Request, env: Env, origin: string): 
   });
 }
 
-async function handleSubscription(env: Env, subToken: string): Promise<Response> {
+async function handleSubscription(env: Env, subToken: string, headOnly = false): Promise<Response> {
   const profile = await getProfile(env);
   if (!profile) {
     throw new HttpError(404, "This Worker has not been configured yet.");
@@ -162,15 +162,25 @@ async function handleSubscription(env: Env, subToken: string): Promise<Response>
     throw new HttpError(404, "Subscription not found.");
   }
 
+  if (headOnly) {
+    return new Response(null, {
+      headers: subscriptionHeaders(),
+    });
+  }
+
   const upstreamText = await fetchUpstreamConfig(profile.upstreamUrl);
   const patched = patchConfig(upstreamText, profile);
 
   return new Response(patched, {
-    headers: {
-      "content-type": "text/yaml; charset=utf-8",
-      "cache-control": "no-store",
-    },
+    headers: subscriptionHeaders(),
   });
+}
+
+function subscriptionHeaders(): HeadersInit {
+  return {
+    "content-type": "text/yaml; charset=utf-8",
+    "cache-control": "no-store",
+  };
 }
 
 async function requireAuthorizedProfile(request: Request, env: Env): Promise<StoredProfile> {
