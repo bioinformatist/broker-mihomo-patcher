@@ -46,6 +46,13 @@ const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const SUBSCRIPTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_PROFILE_UPDATE_INTERVAL_HOURS = 24;
 const DEFAULT_UPSTREAM_USER_AGENT = "ClashMetaForAndroid/2.11.30";
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#111827"/>
+  <path d="M18 42 46 18" stroke="#38bdf8" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="18" cy="42" r="9" fill="#ff6900"/>
+  <circle cx="46" cy="18" r="9" fill="#1687e9"/>
+  <path d="M21 21h14l-8 22h14" fill="none" stroke="#f9fafb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
 
 class HttpError extends Error {
   constructor(
@@ -70,8 +77,8 @@ export default {
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
 
-  if (request.method === "GET" && url.pathname === "/favicon.ico") {
-    return new Response(null, { status: 204 });
+  if (request.method === "GET" && (url.pathname === "/favicon.ico" || url.pathname === "/favicon.svg")) {
+    return faviconResponse();
   }
 
   if (request.method === "GET" && url.pathname === "/") {
@@ -561,6 +568,15 @@ function htmlResponse(body: string): Response {
   });
 }
 
+function faviconResponse(): Response {
+  return new Response(FAVICON_SVG, {
+    headers: {
+      "content-type": "image/svg+xml; charset=utf-8",
+      "cache-control": "public, max-age=86400",
+    },
+  });
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -596,6 +612,7 @@ function renderAppHtml(configured: boolean): string {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>Broker Mihomo Patcher</title>
     <style>
       :root {
