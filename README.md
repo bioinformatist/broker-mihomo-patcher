@@ -13,14 +13,26 @@ with broker routing rules and returns a stable subscription URL.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bioinformatist/broker-mihomo-patcher)
 
-Click the button above to create your own copy of this Worker. After GitHub
-creates the repository for you, add two repository secrets:
+Click the button above to create your own copy of this Worker, then finish the
+deployment from GitHub Actions:
 
-- `CLOUDFLARE_ACCOUNT_ID`: your Cloudflare account ID.
-- `CLOUDFLARE_API_TOKEN`: a Cloudflare API token that can edit Workers.
+1. Find your Cloudflare account ID:
+   `Cloudflare dashboard -> Workers & Pages -> Account details -> Account ID`.
+2. Create a Cloudflare API token:
+   `Cloudflare dashboard -> Manage Account -> Account API Tokens -> Create Token`.
+   Under `Permission policies`, open `Custom` and choose
+   `Edit Cloudflare Workers`. Scope the token to the Cloudflare account where
+   this Worker will be deployed. Copy the token value when Cloudflare shows it;
+   it is only shown once.
+3. Add the values to GitHub:
+   `your new GitHub repository -> Settings -> Secrets and variables -> Actions -> Secrets -> New repository secret`.
+   Create exactly these two repository secrets:
+   - `CLOUDFLARE_ACCOUNT_ID`: the account ID from step 1.
+   - `CLOUDFLARE_API_TOKEN`: the API token from step 2.
+4. Deploy:
+   `GitHub repository -> Actions -> Deploy Worker -> Run workflow`.
 
-Then run the `Deploy Worker` workflow from GitHub Actions. Do not commit either
-value to the repository.
+Do not commit the account ID or API token to the repository.
 
 ## Who This Is For
 
@@ -67,7 +79,8 @@ The first page asks for:
 
 - upstream Mihomo/Clash YAML subscription URL;
 - broker apps to enable;
-- target policy group, defaulting to `PROXY` when available.
+- target policy group. Keep the default unless you know which policy group your
+  client should use.
 
 Save the generated links:
 
@@ -103,6 +116,6 @@ Worker URL again and configure it from scratch.
 - **The 24-hour cache is not a perfect global lock.** If multiple clients or
   Cloudflare regions refresh right after the cache expires, the Worker may ask
   the upstream provider more than once.
-- **A successful `HEAD` request only means the subscription token exists.** It
+- **Some clients may only test whether the URL exists.** A successful URL check
   does not prove that the next full subscription refresh can reach the upstream
   provider.

@@ -11,13 +11,24 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bioinformatist/broker-mihomo-patcher)
 
-点击上方按钮创建你自己的 Worker。GitHub 为你创建仓库后，在仓库里添加两个
-Secrets：
+点击上方按钮创建你自己的 Worker，然后从 GitHub Actions 完成部署：
 
-- `CLOUDFLARE_ACCOUNT_ID`：你的 Cloudflare account ID。
-- `CLOUDFLARE_API_TOKEN`：拥有编辑 Workers 权限的 Cloudflare API token。
+1. 找到你的 Cloudflare account ID：
+   `Cloudflare dashboard -> Workers & Pages -> Account details -> Account ID`。
+2. 创建 Cloudflare API token：
+   `Cloudflare dashboard -> Manage Account -> Account API Tokens -> Create Token`。
+   在 `Permission policies` 里打开 `Custom`，选择
+   `Edit Cloudflare Workers`。Token 的作用范围只选择你准备用来部署这个
+   Worker 的 Cloudflare 账号。Cloudflare 显示 token 后马上复制保存；这个值只会显示一次。
+3. 把两个值填到 GitHub：
+   `你的新 GitHub 仓库 -> Settings -> Secrets and variables -> Actions -> Secrets -> New repository secret`。
+   创建这两个 repository secrets，名字必须完全一致：
+   - `CLOUDFLARE_ACCOUNT_ID`：第 1 步复制的 account ID。
+   - `CLOUDFLARE_API_TOKEN`：第 2 步创建的 API token。
+4. 部署：
+   `GitHub 仓库 -> Actions -> Deploy Worker -> Run workflow`。
 
-Secrets 填好后，在 GitHub Actions 中运行 `Deploy Worker` workflow。不要把这两个值提交到仓库。
+不要把 account ID 或 API token 提交到仓库。
 
 ## 适合谁
 
@@ -55,7 +66,7 @@ https://broker-mihomo-patcher.<your-subdomain>.workers.dev
 
 - 上游 Mihomo/Clash YAML 订阅地址；
 - 需要启用的券商 App；
-- 目标策略组，通常会默认选择 `PROXY`。
+- 目标策略组。除非你知道客户端应该使用哪个策略组，否则保持默认即可。
 
 请保存生成后的链接：
 
@@ -78,4 +89,4 @@ https://broker-mihomo-patcher.<your-subdomain>.workers.dev
 - **重新生成的订阅地址不一定会在所有地区立刻生效。** Cloudflare KV 是最终一致的，所以旧订阅地址可能会在部分地区短暂继续可用。
 - **首次配置页面在 Worker 配置完成前是开放的。** 部署后请尽快完成配置。如果被其他人抢先配置，请在 Cloudflare KV 中删除 `profile:v1` 和 `subscription-cache:v1`，等待片刻后再重新配置。
 - **24 小时缓存不是完美的全局锁。** 如果多个客户端或多个 Cloudflare 区域刚好在缓存过期后同时刷新，Worker 可能会向上游发起超过一次请求。
-- **一次成功的 `HEAD` 请求只代表订阅 token 存在。** 它不代表下一次完整订阅刷新一定能连接到上游服务商。
+- **有些客户端只会先测试订阅地址是否存在。** 一次成功的地址检查不代表下一次完整订阅刷新一定能连接到上游服务商。
