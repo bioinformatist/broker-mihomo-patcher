@@ -3,10 +3,6 @@ import { parse } from "yaml";
 import worker from "../src/index";
 
 const UPSTREAM_URL = "https://example.com/sub.yaml";
-const YTOO_QTT_URL =
-  "https://example.qtt-163cdn.com/sub?target=clash&filename=YToo_SS&new_name=true&scv=true&tfo=false&clash.doh=true&emoji=true&udp=true&url=https%3A%2F%2Fapi.ytoo.xyz%2Fosubscribe.php%3Fsid%3Dredacted%26token%3Dredacted%26sip002%3D1";
-const YTOO_AI_URL =
-  "https://example.ai-163cdn.com/sub?target=clash&filename=YToo_SS&new_name=true&scv=true&tfo=false&clash.doh=true&emoji=true&udp=true&url=https%3A%2F%2Fapi.ytoo.xyz%2Fosubscribe.php%3Fsid%3Dredacted%26token%3Dredacted%26sip002%3D1";
 const PROFILE_KEY = "profile:v1";
 const SUBSCRIPTION_CACHE_KEY = "subscription-cache:v1";
 const UPSTREAM_CONFIG = `
@@ -56,14 +52,11 @@ describe("worker routes", () => {
     env = { BROKER_PATCHER_KV: new MemoryKV() as unknown as KVNamespace };
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === "string" ? input : input.toString();
-        if (url === UPSTREAM_URL || url === YTOO_QTT_URL || url === YTOO_AI_URL) {
+        if (url === UPSTREAM_URL) {
           if (upstreamError) {
             throw upstreamError;
-          }
-          if ((url === YTOO_QTT_URL || url === YTOO_AI_URL) && new Headers(init?.headers).get("x-forwarded-for") !== "") {
-            return new Response("not found", { status: 404 });
           }
 
           return new Response(upstreamConfig, {
@@ -118,57 +111,6 @@ describe("worker routes", () => {
       "DOMAIN-SUFFIX,moomoo.com,PROXY",
       "DOMAIN-SUFFIX,futuhn.com,PROXY",
     ]);
-  });
-
-  it("retries qTT YToo subscriptions while attempting to suppress XFF", async () => {
-    const response = await callWorker(
-      "/inspect",
-      {
-        method: "POST",
-        body: JSON.stringify({ upstreamUrl: YTOO_QTT_URL }),
-      },
-      env,
-    );
-    const body = await response.json() as {
-      defaultPolicy: string;
-    };
-    const fetchMock = vi.mocked(fetch);
-
-    expect(response.status).toBe(200);
-    expect(body.defaultPolicy).toBe("PROXY");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(requestHeader(fetchMock.mock.calls[0], "x-forwarded-for")).toBeNull();
-    expect(requestHeader(fetchMock.mock.calls[1], "x-forwarded-for")).toBe("");
-  });
-
-  it("retries ai-163cdn YToo subscriptions while attempting to suppress XFF", async () => {
-    const response = await callWorker(
-      "/inspect",
-      {
-        method: "POST",
-        body: JSON.stringify({ upstreamUrl: YTOO_AI_URL }),
-      },
-      env,
-    );
-
-    expect(response.status).toBe(200);
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
-    expect(requestHeader(vi.mocked(fetch).mock.calls[1], "x-forwarded-for")).toBe("");
-  });
-
-  it("does not retry generic upstream 404 responses", async () => {
-    upstreamStatus = 404;
-    const response = await callWorker(
-      "/inspect",
-      {
-        method: "POST",
-        body: JSON.stringify({ upstreamUrl: UPSTREAM_URL }),
-      },
-      env,
-    );
-
-    expect(response.status).toBe(502);
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 
   it("serves cached subscription metadata without refetching upstream", async () => {

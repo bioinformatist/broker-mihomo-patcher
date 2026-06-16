@@ -121,6 +121,13 @@ Worker URL again and configure it from scratch.
 - **Some clients may only test whether the URL exists.** A successful URL check
   does not prove that the next full subscription refresh can reach the upstream
   provider.
+- **YToo qTT/ai wrapped subscription URLs are not supported.** YToo links that
+  go through hosts such as `*.qtt-163cdn.com` or `*.ai-163cdn.com` can return
+  HTTP 404 when fetched from Cloudflare Workers, even though the same URL works
+  from CMFA or local `curl` with a subscription-client User-Agent. This appears
+  to be caused by Cloudflare Worker egress headers or network identity rather
+  than Mihomo YAML patching. See
+  [issue #3](https://github.com/bioinformatist/broker-mihomo-patcher/issues/3).
 
 ## License
 

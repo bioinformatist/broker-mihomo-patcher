@@ -45,10 +45,7 @@ const SUBSCRIPTION_CACHE_KEY = "subscription-cache:v1";
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const SUBSCRIPTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_PROFILE_UPDATE_INTERVAL_HOURS = 24;
-const UPSTREAM_ACCEPT = "text/yaml, application/yaml, text/plain, */*";
 const DEFAULT_UPSTREAM_USER_AGENT = "ClashMetaForAndroid/2.11.30";
-const YTOO_COMPAT_HOST_SUFFIXES = ["ai-163cdn.com", "qtt-163cdn.com"];
-const YTOO_QTT_COMPAT_RETRY_STATUSES = new Set([400, 403, 404]);
 const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="14" fill="#111827"/>
   <path d="M18 42 46 18" stroke="#38bdf8" stroke-width="7" stroke-linecap="round"/>
@@ -439,10 +436,17 @@ function validateUpstreamUrl(value: string): void {
 }
 
 async function fetchUpstreamConfig(upstreamUrl: string, sourceRequest?: Request): Promise<UpstreamSubscription> {
-  let response = await fetchUpstreamResponse(upstreamUrl, sourceRequest);
-  if (shouldRetryYtooQttSubscription(upstreamUrl, response.status)) {
-    await cancelResponseBody(response);
-    response = await fetchUpstreamResponse(upstreamUrl, sourceRequest, true);
+  let response: Response;
+  try {
+    response = await fetch(upstreamUrl, {
+      headers: {
+        accept: "text/yaml, application/yaml, text/plain, */*",
+        "user-agent": upstreamUserAgent(sourceRequest),
+      },
+    });
+  } catch (error) {
+    const reason = error instanceof Error && error.message ? `: ${error.message}` : ".";
+    throw new HttpError(502, `Failed to fetch the upstream subscription${reason}`);
   }
 
   if (!response.ok) {
@@ -458,78 +462,6 @@ async function fetchUpstreamConfig(upstreamUrl: string, sourceRequest?: Request)
     text,
     headers: readSubscriptionMetadataHeaders(response.headers),
   };
-}
-
-async function fetchUpstreamResponse(
-  upstreamUrl: string,
-  sourceRequest?: Request,
-  ytooQttCompatibility = false,
-): Promise<Response> {
-  let response: Response;
-  try {
-    response = await fetch(upstreamUrl, {
-      headers: upstreamRequestHeaders(sourceRequest, ytooQttCompatibility),
-    });
-  } catch (error) {
-    const reason = error instanceof Error && error.message ? `: ${error.message}` : ".";
-    throw new HttpError(502, `Failed to fetch the upstream subscription${reason}`);
-  }
-
-  return response;
-}
-
-async function cancelResponseBody(response: Response): Promise<void> {
-  try {
-    await response.body?.cancel();
-  } catch {
-    // Best-effort cleanup before retrying the upstream request.
-  }
-}
-
-function upstreamRequestHeaders(sourceRequest?: Request, ytooQttCompatibility = false): HeadersInit {
-  const headers: Record<string, string> = {
-    accept: UPSTREAM_ACCEPT,
-    "user-agent": upstreamUserAgent(sourceRequest),
-  };
-
-  if (ytooQttCompatibility) {
-    // Try to suppress proxy-chain client IP headers that qTT/YToo rejects with 404.
-    headers["x-forwarded-for"] = "";
-  }
-
-  return headers;
-}
-
-function shouldRetryYtooQttSubscription(upstreamUrl: string, status: number): boolean {
-  return YTOO_QTT_COMPAT_RETRY_STATUSES.has(status) && isYtooQttSubscriptionUrl(upstreamUrl);
-}
-
-function isYtooQttSubscriptionUrl(value: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return false;
-  }
-
-  if (!YTOO_COMPAT_HOST_SUFFIXES.some((suffix) => url.hostname === suffix || url.hostname.endsWith(`.${suffix}`))) {
-    return false;
-  }
-  if (url.pathname !== "/sub" || url.searchParams.get("target") !== "clash") {
-    return false;
-  }
-
-  const nested = url.searchParams.get("url");
-  if (!nested) {
-    return false;
-  }
-
-  try {
-    const nestedUrl = new URL(nested);
-    return nestedUrl.hostname === "api.ytoo.xyz" && nestedUrl.pathname === "/osubscribe.php";
-  } catch {
-    return false;
-  }
 }
 
 function upstreamUserAgent(sourceRequest?: Request): string {
